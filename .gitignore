@@ -1,0 +1,16 @@
+# 运行数据：含登录密码、推送/AI token，严禁入库
+data/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+
+# 编辑器/系统
+.zcode/
+Desktop.ini
+Thumbs.db
+~$*.xlsx
+.test-all-tmp/
+preview.log
+server.log

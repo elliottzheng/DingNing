@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>叮咛 · 教师的智慧日程</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img class="brand-logo" src="/static/favicon.svg" alt="叮咛">叮咛<span class="brand-sub">教师的智慧日程</span></div>
+  <nav class="tabs">
+    <button class="tab active" data-view="today">今日</button>
+    <button class="tab" data-view="week">本周</button>
+  </nav>
+  <div class="actions">
+    <div class="q-wrap">
+      <input id="q-input" placeholder="搜索日程 / 待办…" autocomplete="off" hidden>
+      <div id="q-results" hidden></div>
+    </div>
+    <button id="btn-search" class="ghost">搜索</button>
+    <button id="btn-add" class="primary">+ 新建</button>
+    <button id="btn-import" class="ghost" title="重新扫描目录导入课表/校历 Excel">导入</button>
+    <button id="btn-settings" class="ghost">设置</button>
+    <button id="btn-help" class="ghost" title="使用说明（快捷键 ?）">帮助</button>
+    <button id="btn-user" class="ghost" title="当前用户 · 点击改密码/退出登录"></button>
+    <div id="user-menu" hidden>
+      <div class="um-head"></div>
+      <button id="um-pass" class="ghost">修改密码</button>
+      <button id="um-logout" class="danger">退出登录</button>
+    </div>
+  </div>
+  <div id="q-results" hidden></div>
+</header>
+
+<div id="help-modal" class="modal" hidden>
+  <div class="modal-card help-card">
+    <div class="modal-head"><h2>使用说明</h2><button id="help-close" class="ghost" title="关闭">×</button></div>
+    <div class="modal-body help-body">
+      <h3>三步开始</h3>
+      <ol class="help-steps">
+        <li><b>导入课表</b> —— 设置 → 课表导入：上传学校发的 Excel（按提示填「我的科目 / 我教的班级」），或直接粘贴一行一节的明文课表</li>
+        <li><b>对齐作息</b> —— 设置 → 作息时间表：每节课的时间范围，可增删节次</li>
+        <li><b>开启推送</b> —— 设置 → 推送：填入你的 PushPlus token，每晚自动推送明日安排到微信</li>
+      </ol>
+
+      <h3>我想做什么（任务索引）</h3>
+      <div class="help-tasks">
+        <div class="help-task"><span>记一件事（待办/日程）</span><span>首页顶部输入框，直接说：<i>周三下午3点机房教研会议</i></span></div>
+        <div class="help-task"><span>看某天的安排</span><span>今日页 ← → 切换日期；本周页看整周</span></div>
+        <div class="help-task"><span>某节课停上 / 改时间 / 换天</span><span>课表里点那节课 → 弹窗三选一</span></div>
+        <div class="help-task"><span>搜过去的日程</span><span>顶栏「搜索」输入关键词（如 校运会）</span></div>
+        <div class="help-task"><span>换课表（学期中也可以）</span><span>设置 → 课表导入：上传时填「生效日」；或粘贴明文课表</span></div>
+        <div class="help-task"><span>导入校历（考试/假期）</span><span>设置 → 上传 Excel（文件名含「教学安排/校历」自动识别）</span></div>
+        <div class="help-task"><span>每天微信收明日安排</span><span>设置 → 推送 Token：填 PushPlus token</span></div>
+        <div class="help-task"><span>在微信里查课表 / 记待办</span><span>设置 → 微信指令通道：绑定后直接发消息，发「帮助」看指令</span></div>
+        <div class="help-task"><span>改密码 / 退出登录</span><span>设置 → 安全</span></div>
+        <div class="help-task"><span>把系统给同事用</span><span>设置 → 用户管理：把邀请码发给同事注册</span></div>
+      </div>
+
+      <h3>明文课表格式（速查）</h3>
+      <p class="field-hint">一行一节课，字段顺序随意；# 开头为注释；同一节多个班写在同一行；完整规则与「让 AI 帮你转换」的提示词见项目里的《课表文本格式说明》。</p>
+      <pre class="help-code">周一 上午1 17班
+周二 下午1 21班 语文课
+周三 上午1 23班 24班 @机房</pre>
+
+      <h3>数据与备份</h3>
+      <p class="field-hint">每位老师一个独立数据库文件（data/users/用户名.db），互不可见。备份 = 拷贝自己那一个文件。课表/校历 Excel 上传后保存在 data/uploads/。</p>
+    </div>
+  </div>
+</div>
+
+<main id="view-today">
+  <div id="onboard" class="card onboarding" hidden>
+    <h2>开始使用</h2>
+    <p class="ob-lead">三步把系统变成你自己的：</p>
+    <ol>
+      <li><b>导入课表</b><span>设置 → 课表导入：上传学校发的 Excel，或粘贴一行一节的明文课表</span></li>
+      <li><b>对齐作息</b><span>设置 → 作息时间表：每节课的时间范围，可增删节次</span></li>
+      <li><b>开启推送</b><span>设置 → 推送：填入 token，每晚自动推送明日安排到微信</span></li>
+    </ol>
+    <div class="ob-actions">
+      <button id="ob-open-settings" class="primary">打开设置</button>
+      <button id="ob-help" class="ghost">查看使用说明</button>
+      <button id="ob-dismiss" class="ghost">不再显示</button>
+    </div>
+  </div>
+
+  <section class="card quickbox">
+    <div class="quickadd">
+      <span class="quick-label">快速记录</span>
+      <input id="quick-input" placeholder="记待办 / 日程、查课表…（如：周三下午3点机房教研会议）">
+      <button id="quick-btn" class="primary">发送</button>
+    </div>
+    <div id="quick-hint"></div>
+    <div id="quick-reply" class="quick-reply" hidden></div>
+  </section>
+
+  <div class="datenav">
+    <div class="navbtns">
+      <button id="d-prev" class="nav-arrow" title="前一天">‹</button>
+      <button id="d-today" class="nav-today">今天</button>
+      <button id="d-next" class="nav-arrow" title="后一天">›</button>
+    </div>
+    <div class="datelabel">
+      <span id="d-label">—</span>
+      <span id="d-week" class="weekbadge"></span>
+    </div>
+  </div>
+  <div id="banners"></div>
+  <div class="grid2">
+    <section class="card">
+      <div class="card-head">
+        <h2>日程 · 课表</h2>
+        <button class="mini-add" id="add-event-inline">+ 添加日程</button>
+      </div>
+      <div id="schedule"></div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <h2>待办</h2>
+        <button class="mini-add" id="add-todo-inline">+ 添加待办</button>
+      </div>
+      <div id="due-today" class="due-today"></div>
+      <ul id="todos"></ul>
+    </section>
+  </div>
+</main>
+
+<main id="view-week" hidden>
+  <div class="datenav">
+    <div class="navbtns">
+      <button id="w-prev" class="nav-arrow" title="上一周">‹</button>
+      <button id="w-today" class="nav-today">本周</button>
+      <button id="w-next" class="nav-arrow" title="下一周">›</button>
+    </div>
+    <div class="datelabel">
+      <span id="w-label">—</span>
+      <span id="w-week" class="weekbadge"></span>
+    </div>
+  </div>
+  <div id="weekgrid" class="weekwrap"></div>
+</main>
+
+<div id="lesson-modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><h2 id="ls-head">调整本节课</h2><button id="ls-close" class="ghost" title="关闭">×</button></div>
+    <div class="modal-body">
+      <p id="ls-info" class="ls-info"></p>
+      <div id="ls-main" class="row ls-actions">
+        <button id="ls-cancel-btn" class="danger">停课（本次）</button>
+        <button id="ls-time-btn">改时间</button>
+        <button id="ls-move-btn">换到其他日期</button>
+      </div>
+      <div id="ls-restore-row" class="row" hidden>
+        <button id="ls-restore" class="primary">恢复此课（撤销调课）</button>
+      </div>
+      <div id="ls-time-form" hidden>
+        <div class="row">
+          <label>新开始 <input type="time" id="ls-new-start2"></label>
+          <label>新结束 <input type="time" id="ls-new-end2"></label>
+        </div>
+        <label>备注 <input type="text" id="ls-time-note" placeholder="可空，如：教研活动作息"></label>
+        <div class="row"><button id="ls-time-save" class="primary">确认改时间（当天）</button></div>
+      </div>
+      <div id="ls-move-form" hidden>
+        <label>换到日期 <input type="date" id="ls-new-date"></label>
+        <label>节次 <select id="ls-new-sec"></select></label>
+        <label>备注 <input type="text" id="ls-note" placeholder="可空，如：与周五对调"></label>
+        <div class="row"><button id="ls-move-save" class="primary">确认换课</button></div>
+      </div>
+      <div id="ls-msg" class="form-msg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="add-modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><h2 id="form-head">新建</h2><button id="add-close" class="ghost" title="关闭">×</button></div>
+    <div class="modal-body">
+      <div class="type-tabs">
+        <button class="type-tab active" data-type="event">日程</button>
+        <button class="type-tab" data-type="todo">待办</button>
+      </div>
+      <label>标题 <input type="text" id="add-title" placeholder="必填"></label>
+      <div id="add-event-fields">
+        <label>日期 <input type="date" id="add-date"></label>
+        <div class="row">
+          <label>开始 <input type="time" id="add-start"></label>
+          <label>结束 <input type="time" id="add-end"></label>
+        </div>
+        <label>地点 <input type="text" id="add-loc" placeholder="可空"></label>
+        <p class="field-hint">时间留空 = 全天日程</p>
+      </div>
+      <div id="add-todo-fields" hidden>
+        <label>截止时间 <input type="datetime-local" id="add-due"></label>
+        <label>优先级 <select id="add-prio">
+          <option value="1">中</option><option value="0">低</option><option value="2">高</option>
+        </select></label>
+        <p class="field-hint">截止留空 = 无截止时间</p>
+      </div>
+      <label>备注 <input type="text" id="add-note" placeholder="可空"></label>
+      <label>提醒 <select id="add-remind">
+          <option value="">不提醒</option><option value="0">开始/截止时</option>
+          <option value="5">提前 5 分钟</option><option value="15">提前 15 分钟</option>
+          <option value="30">提前 30 分钟</option><option value="60">提前 1 小时</option>
+          <option value="1440">提前 1 天</option>
+        </select></label>
+      <div class="row">
+        <button id="add-del" class="danger" hidden>删除</button>
+        <button id="add-save" class="primary">保存</button>
+      </div>
+      <div id="add-msg" class="form-msg"></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><h2>设置</h2><button id="modal-close" class="ghost" title="关闭">×</button></div>
+    <div class="modal-body">
+<nav class="cfg-nav" id="cfg-nav" aria-label="设置分区"></nav>
+<section class="cfg-sec" id="sec-import" data-nav="课表导入">
+<h3>导入课表</h3>
+      <h4>方式一：粘贴明文课表（推荐，最快）</h4>
+      <p class="field-hint">一行一节课：星期 节次 班级 [科目课]（顺序随意，可多个班；# 开头为注释）。科目可写别名（如「文」，自动归一到你的科目名）。格式细则见《课表文本格式说明》。</p>
+      <textarea id="cfg-schedule-text" rows="9" placeholder="周一 上午1 17班&#10;周二 下午1 21班 语文课&#10;周三 上午2 22班 @机房"></textarea>
+      <div class="row">
+        <span class="inline-date">生效日 <input type="date" id="cfg-schedule-eff"></span>
+      </div>
+      <div class="seg">
+        <label><input type="radio" name="cfg-text-mode" value="replace" checked>覆盖该日课表</label>
+        <label><input type="radio" name="cfg-text-mode" value="append">追加到已有课表</label>
+      </div>
+      <p class="field-hint">生效日 = 这份课表从哪天开始执行（之前的日期仍显示旧课表）。覆盖 = 整份重导该生效日；追加 = 保留已有课，补加新课/单节常驻课，同班同节次自动更新。</p>
+      <div class="row">
+        <button id="cfg-schedule-text-import" class="primary">导入明文课表</button>
+        <span id="cfg-schedule-msg" class="form-msg"></span>
+      </div>
+      <h4>方式二：上传 Excel 文件</h4>
+      <p class="field-hint">支持学校的年级大课表（行=班级、列=星期×节次、格=科目）与个人课表（行=节次、格=班级名）。文件名含「教学安排/校历」按校历导入。</p>
+      <div class="row">
+        <input type="file" id="cfg-upload-file" accept=".xlsx,.xls">
+        <label class="inline-date">生效日 <input type="date" id="cfg-upload-eff" title="学期中换课表时设为未来日期：切换日前照旧课表，当天起执行新课表"></label>
+        <button id="cfg-upload-btn">上传并导入</button>
+      </div>
+      <h4>方式三的识别配置：我的科目与班级</h4>
+      <p class="field-hint">给<b>方式一/二</b>做科目归一与班级过滤：格子里的简称（如「文」）会归一到下面的科目名。教多门课就加多行。</p>
+      <div id="cfg-subj-groups"></div>
+      <div class="row">
+        <button id="cfg-subj-add" class="">+ 添加一门课</button>
+      </div>
+      <label>我教的班级（班号，用顿号分隔，可写"17班"；留空 = 课表里出现的班全要）
+        <input type="text" id="cfg-my-classes" placeholder="如：17、18、22"></label>
+      <div class="row">
+        <button id="cfg-import-save" class="primary">保存科目与班级</button>
+        <span id="cfg-import-msg" class="form-msg"></span>
+      </div>
+      </section>
+<section class="cfg-sec" id="sec-times" data-nav="作息">
+<h3>作息时间表</h3>
+      <div id="cfg-times"></div>
+      <label>上课提醒（每节课开始前 N 分钟推送到你的通道；留空 = 不提醒）
+        <input type="number" id="cfg-lesson-remind" min="0" max="120" placeholder="如 10"></label>
+      <div class="row">
+        <button id="cfg-time-add" class="">+ 添加节次</button>
+        <button id="cfg-time-save" class="">保存作息与提醒</button>
+        <span id="cfg-time-msg" class="form-msg"></span>
+      </div>
+      </section>
+<section class="cfg-sec" id="sec-ovr" data-nav="调休">
+<h3>调休与补班</h3>
+      <p class="field-hint">某天按另一个星期的课表上课（如周六补班按周一、调休按周二）。当天日视图会出现调休横幅，推送与周视图同步跟随。</p>
+      <div id="cfg-overrides"></div>
+      <div class="row">
+        <button id="cfg-ovr-add" class="">+ 添加调休日</button>
+        <button id="cfg-ovr-save" class="">保存调休</button>
+        <span id="cfg-ovr-msg" class="form-msg"></span>
+      </div>
+      </section>
+<section class="cfg-sec" id="sec-cal" data-nav="明文校历">
+<h3>明文校历导入</h3>
+      <p class="field-hint">一行一件事：日期 事项名称（自动识别 假期/考试/活动；日期区间自动按天展开；行尾可用 [假期] [考试] [活动] 显式标注）。整份导入会替换现有校历；有错全不导。</p>
+      <p class="field-hint">事件名含「运会 / 期中 / 期末 / 月考」默认当天停课；其他事项可加行尾标注 [停课]。停课日课程自动标记、课堂归属跳过，无需逐节登记。</p>
+      <textarea id="cfg-calendar-text" rows="7" placeholder="9/28-9/30 月考&#10;10/1-10/7 国庆假&#10;11/5-11/6 校运会（自动停课）&#10;11/12 家长会 18:30-20:00&#10;12/20 交流 [停课]"></textarea>
+      <div class="row">
+        <label>年份归属 <input type="number" id="cfg-calendar-year" style="width:90px" title="短日期（如 10/1）的年份归属；默认当前学年推算"></label>
+        <button id="cfg-calendar-text-import" class="primary">导入明文校历</button>
+        <span id="cfg-calendar-msg" class="dim"></span>
+      </div>
+      </section>
+<section class="cfg-sec" id="sec-push" data-nav="推送">
+<h3>推送</h3>
+      <label>每晚推送时间 <input type="time" id="cfg-push_time"></label>
+      <p class="field-hint">每晚这个时间把<b>明日安排</b>（课表 + 待办）推送到你的接收渠道。下方配置了 WxPusher 就走 APP，否则走 PushPlus 微信。</p>
+
+      <h4>WxPusher（APP 推送，推荐，免费无限制）</h4>
+      <p class="field-hint">① 手机安装 WxPusher 应用（应用商店搜"WxPusher"）。② 点下方按钮出二维码，用 <b>WxPusher APP 里「扫一扫」</b>扫码完成订阅。③ UID 自动填入；没自动填就在 APP「我的」页复制 UID 手动粘贴。</p>
+      <label>WxPusher UID <input type="text" id="cfg-wxpusher_uid" placeholder="UID_ 开头" autocomplete="off"></label>
+      <div id="cfg-wxpusher-admin" hidden>
+        <label>WxPusher appToken（仅管理员填写，部署级） <input type="password" id="cfg-wxpusher_app_token" placeholder="已设置（输入新值覆盖）" autocomplete="off"></label>
+        <p class="field-hint">当前 appToken：<span id="cfg-wxpusher-masked">未设置</span>（留空保持不变）。</p>
+      </div>
+      <div class="row">
+        <button id="cfg-wxpusher-qr">出二维码（用 WxPusher APP 扫）</button>
+        <button id="cfg-wxpusher-test">测试 WxPusher（推一条测试消息）</button>
+      </div>
+      <div id="cfg-wxpusher-qrbox" hidden>
+        <p class="field-hint">打开 <b>WxPusher APP → 首页「扫一扫」</b>，对着下面的二维码扫，即完成订阅（30 分钟内有效）。订阅成功 UID 会自动填入并收到一条欢迎消息。</p>
+        <img id="cfg-wxpusher-qrurl" alt="订阅二维码" style="width:200px;height:200px;border:1px solid var(--line);border-radius:8px;background:#fff">
+      </div>
+      <p class="field-hint"><b>没有自动填入？</b>手动兜底：打开 WxPusher APP → 底部「我的」→ 头像下方的 <b>UID</b>（UID_ 开头）→ 复制粘贴到上面输入框 → 保存即可，效果完全相同。清空 UID 保存 = 停用 APP 推送，回退 PushPlus。</p>
+
+      <h4>PushPlus（微信推送，兜底）</h4>
+      <p class="field-hint">关注微信公众号“pushplus推送加”并绑定后，填入自己的 token。每晚摘要会推送到你的微信。</p>
+      <label>PushPlus Token <input type="password" id="cfg-pushplus_token" placeholder="已设置（输入新值覆盖）" autocomplete="off"></label>
+      <p class="field-hint">当前 Token：<span id="cfg-token-masked">未设置</span>（留空保持不变）。</p>
+      <div class="row">
+        <button id="cfg-pushplus-test">测试 PushPlus（推一条测试消息）</button>
+      </div>
+
+      <div class="row">
+        <button id="cfg-save" class="primary">保存推送设置</button>
+        <button id="cfg-test">发送完整测试推送（明日摘要）</button>
+        <span id="cfg-msg" class="form-msg"></span>
+      </div>
+      </section>
+<section class="cfg-sec" id="sec-safe" data-nav="安全">
+<h3>改密码 / 退出登录</h3>
+      <label>当前密码 <input type="password" id="cfg-curpass" placeholder="修改密码时需验证" autocomplete="current-password"></label>
+      <label>新密码 <input type="password" id="cfg-newpass" placeholder="修改登录密码" autocomplete="new-password"></label>
+      <div class="row">
+        <button id="cfg-pass-save" class="primary">保存密码</button>
+        <button id="cfg-logout">退出登录</button>
+      </div>
+      <p class="field-hint">密码以哈希存储；连续 5 次输错锁定 15 分钟。修改密码需先填当前密码，保存后所有设备需重新登录。</p>
+      <div id="admin-section" hidden>
+        <h3>用户管理（管理员）</h3>
+        <p class="field-hint">注册邀请码：<span id="admin-invite">…</span>
+          <button id="admin-invite-reset" class="">重置</button></p>
+        <div id="admin-users"></div>
+        <div id="admin-msg" class="form-msg"></div>
+      </div>
+      </section>
+<section class="cfg-sec" id="sec-wechat" data-nav="微信">
+<h3>微信指令通道</h3>
+      <p class="field-hint">绑定后，在微信「ClawBot」里发文字即可操作（记待办/日程、查课表、查待办）。需先在 pushplus 个人中心→渠道配置→微信 ClawBot 扫码绑定，再把下面的用户 token 与用户密钥填进来保存。</p>
+      <label>ClawBot 用户 token <input type="password" id="cfg-clawbot_token" placeholder="留空=不修改" autocomplete="off"></label>
+      <label>ClawBot 用户密钥 secretKey <input type="password" id="cfg-clawbot_secret" placeholder="留空=不修改" autocomplete="off"></label>
+      <p class="field-hint">状态：<span id="cfg-clawbot-state">未配置</span></p>
+      <div class="row">
+        <button id="cfg-clawbot-test">发送测试消息</button>
+        <button id="cfg-clawbot-poll">立即收一次消息</button>
+      </div>
+      <p class="field-hint">微信侧限制：每下发约 10 条需你主动发一次消息，之后才能继续收叮咛的回复。写入类回复有间隔与单日上限保护；查询（课表/待办/帮助）不受限。</p>
+      </section>
+<section class="cfg-sec" id="sec-ai" data-nav="AI">
+<h3>SiliconFlow（语义搜索向量，可选）</h3>
+      <p class="field-hint">此 key 用于事件语义搜索的向量化（免费模型）。意图理解已由智能体直接完成，无需为此配置。</p>
+      <label>API Key <input type="password" id="cfg-sf_key" placeholder="留空=不修改" autocomplete="off"></label>
+      <label>模型 <select id="cfg-sf_model">
+        <option value="semif">SemIf（推荐，延迟低）</option>
+        <option value="kev-4b">Kev-4B</option>
+        <option value="diffusiongemma">DiffusionGemma</option>
+      </select></label>
+      <p class="field-hint">状态：<span id="cfg-sf-state">未配置</span>。</p>
+      <div class="row">
+        <button id="cfg-sf-test">测试连通</button>
+      </div>
+      </section>
+      <div id="cfg-msg" class="form-msg"></div>
+</div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/static/js/main.js?v=202611012"></script>
+</body>
+</html>
