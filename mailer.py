@@ -281,7 +281,7 @@ def _remind_scan_one() -> int:
         lmin = int(lmin_s) if lmin_s.isdigit() and int(lmin_s) > 0 else None
         if not lmin:
             return n
-        info = logic.day_items(today, today)
+        info = logic.day_items(now.date(), now.date())
         for it in info["items"]:
             if it.get("type") != "lesson" or it.get("cancelled") or not it.get("start"):
                 continue
