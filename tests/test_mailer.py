@@ -131,3 +131,59 @@ def test_watchdog_noop_when_not_yet_time(client, monkeypatch):
     mailer._watchdog()
     assert sent == []
     db.set_config("last_digest_date", "")
+
+
+def test_ring_time_adjust_clash(client):
+    """响铃撞课 → 挪到该节课开始前 5 分钟；课间/无课日不动。"""
+    import common
+    d = date(2026, 11, 4)                                     # 周三（conftest 有示例课）
+    # conftest 周三课：上午1 8:00-8:45、上午2 9:00-9:45、下午1 14:15-15:00、下午2 15:15-16:00
+    assert common.ring_time_adjust(d, "08:30") == "07:55"     # 撞上午1
+    assert common.ring_time_adjust(d, "09:30") == "08:55"     # 撞上午2
+    assert common.ring_time_adjust(d, "09:50") == "09:50"     # 课间不挪
+    assert common.ring_time_adjust(d, "14:30") == "14:10"     # 撞下午1（H:MM 存法）
+    assert common.ring_time_adjust(d, "07:00") == "07:00"     # 早于第一节课不挪
+    assert common.ring_time_adjust(d, "18:00") == "18:00"     # 晚间无课不挪
+
+
+def test_ring_time_adjust_single_day_lesson(client):
+    """单次课行（调课补课）同样算上课时段。"""
+    import common
+    d = date(2026, 11, 4)
+    with db.conn() as c:
+        ver = c.execute("SELECT MAX(effective_from) FROM lessons WHERE effective_from<=?",
+                        (d.isoformat(),)).fetchone()[0]
+        c.execute("INSERT INTO lessons(weekday,section,start_time,end_time,class_name,"
+                  "subject,location,weeks,date,effective_from) "
+                  "VALUES(3,'下午3','16:15','17:00','20班','信息','','all',?,?)",
+                  (d.isoformat(), ver))
+    assert common.ring_time_adjust(d, "16:30") == "16:10"     # 撞单次课
+    assert common.ring_time_adjust(date(2026, 11, 5), "16:30") == "16:30"  # 别的日子无此课
+
+
+def test_ring_time_adjust_cancel_and_suspend(client):
+    """该节调走 / 全天停课：不算上课，不调整。"""
+    import common
+    d = date(2026, 11, 4)
+    with db.conn() as c:
+        c.execute("INSERT INTO lesson_cancels(date,weekday,section,note,created_at) "
+                  "VALUES(?,2,'下午1','',?)", (d.isoformat(), d.isoformat()))
+    assert common.ring_time_adjust(d, "14:30") == "14:30"     # 下午1已调走
+    with db.conn() as c:
+        c.execute("INSERT INTO events(date,start_time,end_time,title,location,note,"
+                  "source,kind,suspends) VALUES(?,'','','校运会','','','calendar','event',1)",
+                  (d.isoformat(),))
+    assert common.ring_time_adjust(d, "09:30") == "09:30"     # 停课日全天不撞课
+
+
+def test_ring_time_adjust_chain(client):
+    """挪出的时刻仍撞课（连堂/重叠）→ 继续前移。"""
+    import common
+    d = date(2026, 11, 3)                                     # 周二（独立日期，防用例间污染）
+    with db.conn() as c:
+        ver = c.execute("SELECT MAX(effective_from) FROM lessons WHERE effective_from<=?",
+                        (d.isoformat(),)).fetchone()[0]
+        c.execute("INSERT INTO lessons(weekday,section,start_time,end_time,class_name,"
+                  "subject,location,weeks,effective_from) "
+                  "VALUES(1,'上午2','07:50','09:40','20班','信息','','all',?)", (ver,))
+    assert common.ring_time_adjust(d, "09:00") == "07:45"     # 撞9:00课→08:55仍撞→07:45

@@ -108,6 +108,63 @@ def lesson_at(d: date, section: str):
     return dict(r) if r else None
 
 
+def lesson_covering(d: date, hhmm: str):
+    """返回 d 当天覆盖时刻 hhmm(HH:MM) 的课；停课日/该节已调走返回 None。
+
+    时间兼容 H:MM 与 HH:MM 两种存法（课表导入未统一补零），按分钟数比较。
+    """
+    t = _hhmm_to_min(hhmm)
+
+    def cov(row):
+        s, e = _hhmm_to_min(row["start_time"]), _hhmm_to_min(row["end_time"])
+        return s <= t < e
+
+    with db.conn() as c:
+        if c.execute("SELECT 1 FROM events WHERE date=? AND suspends=1",
+                     (d.isoformat(),)).fetchone():
+            return None                                  # 校历停课日：全天无课
+        ver = c.execute("SELECT MAX(effective_from) FROM lessons WHERE effective_from<=?",
+                        (d.isoformat(),)).fetchone()[0]
+        if not ver:
+            return None
+        rows = c.execute(
+            "SELECT * FROM lessons WHERE effective_from=? "
+            "AND ((weekday=? AND date IS NULL) OR date=?)",
+            (ver, eff_weekday(d), d.isoformat())).fetchall()
+    rows = [r for r in rows if r["start_time"] and cov(r)]
+    if not rows:
+        return None
+    rows.sort(key=lambda r: _hhmm_to_min(r["start_time"]), reverse=True)
+    r = dict(rows[0])
+    with db.conn() as c:
+        if c.execute("SELECT 1 FROM lesson_cancels WHERE date=? AND section=?",
+                     (d.isoformat(), r["section"])).fetchone():
+            return None                                  # 该节已调走：不算上课
+    return r
+
+
+def _hhmm_to_min(s: str) -> int:
+    p = s.strip().split(":")
+    return int(p[0]) * 60 + int(p[1])
+
+
+def ring_time_adjust(d: date, hhmm: str) -> str:
+    """响铃时刻撞上上课时段 → 挪到该节课开始前 5 分钟（迭代直到不撞课）。
+
+    用于日程/待办提醒：老师上课期间手机不能响。挪出的时刻若仍撞课
+    （紧凑课表连堂），继续向前挪；最多回退 6 跳防死循环。
+    """
+    for _ in range(6):
+        les = lesson_covering(d, hhmm)
+        if les is None:
+            return hhmm
+        t = _hhmm_to_min(les["start_time"]) - 5
+        if t < 0:
+            return hhmm                                  # 无更早空隙：保持原样
+        hhmm = f"{t // 60:02d}:{t % 60:02d}"
+    return hhmm
+
+
 def class_sections_on(class_id: int, d: date) -> list[str]:
     """该班在 d 当天的节次列表（按调休有效星期；剔除已单日停课的节次）。
 

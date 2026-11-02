@@ -7,6 +7,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 
 import clawbot
+import common
 import db
 import logic
 
@@ -245,6 +246,12 @@ def _remind_scan_one() -> int:
             except ValueError:
                 continue
             remind_at = start - timedelta(minutes=r["remind_min"])
+            adj = common.ring_time_adjust(now.date(), remind_at.strftime("%H:%M"))
+            if adj != remind_at.strftime("%H:%M"):
+                remind_at = datetime.combine(                 # 撞课：挪到课前 5 分钟
+                    remind_at.date(), datetime.strptime(adj, "%H:%M").time())
+                log.info("日程提醒撞课已调整：%s %s -> %s", r["title"][:20],
+                         start.strftime("%H:%M"), adj)
             key = f"event:{r['id']}:{r['remind_min']}:{r['start_time']}"
             if not _remind_due(c, key, remind_at, now):
                 continue
@@ -267,6 +274,10 @@ def _remind_scan_one() -> int:
             remind_at = due_dt - timedelta(minutes=r["remind_min"])
             if remind_at.date() != today:
                 continue                                 # 只扫今天该发的
+            adj = common.ring_time_adjust(now.date(), remind_at.strftime("%H:%M"))
+            if adj != remind_at.strftime("%H:%M"):
+                remind_at = datetime.combine(                 # 撞课：挪到课前 5 分钟
+                    remind_at.date(), datetime.strptime(adj, "%H:%M").time())
             key = f"todo:{r['id']}:{r['remind_min']}:{r['due']}"
             if not _remind_due(c, key, remind_at, now):
                 continue
